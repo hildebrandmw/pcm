@@ -5211,29 +5211,63 @@ void ServerPCICFGUncore::programServerUncoreMemoryMetrics(int rankA, int rankB, 
             EDCCntConfig[1] = MC_CH_PCI_PMON_CTL_EVENT(0x02) + MC_CH_PCI_PMON_CTL_UMASK(1);  // monitor reads on counter 1: WPQ
             break;
         default:
+            // Unpack counters from environmental variables - default to the standard PCM
+            // defauts is no events are given.
+            char* envs[4] = {
+                "PCM_COUNTER_0",
+                "PCM_COUNTER_1",
+                "PCM_COUNTER_2",
+                "PCM_COUNTER_3"
+            };
+
+            uint32 defaults[4] = {
+                MC_CH_PCI_PMON_CTL_EVENT(0x04) + MC_CH_PCI_PMON_CTL_UMASK(3),   // monitor reads on counter 0: CAS_COUNT.RD 
+                MC_CH_PCI_PMON_CTL_EVENT(0x04) + MC_CH_PCI_PMON_CTL_UMASK(12),  // monitor writes on counter 1: CAS_COUNT.WR
+                MC_CH_PCI_PMON_CTL_EVENT(0xe3),
+                MC_CH_PCI_PMON_CTL_EVENT(0xe7)                                  // monitor PMM_WPQ_REQUESTS on counter 3
+            };
+
+            for (size_t i = 0; i < 4; i++)
+            {
+                std::cout << "Default for " << i << ": " << defaults[i] << std::endl;
+                char* env_val = std::getenv(envs[i]);
+                if (env_val == nullptr)
+                {
+                    MCCntConfig[i] = defaults[i];
+                } else {
+                    uint32 val = std::stoi(std::string(env_val), nullptr, 16);
+                    std::cout << "Got a value: " << val << " for variable " << i << std::endl;
+                    MCCntConfig[i] = val;
+                }
+            }
+
+            if (!pcm->PMMTrafficMetricsAvailable())
+            {
+                std::cerr << "PCM Error: PMM metrics are not available on your platform" << std::endl;
+                return;
+            }
+
             //MCCntConfig[0] = MC_CH_PCI_PMON_CTL_EVENT(0x04) + MC_CH_PCI_PMON_CTL_UMASK(3);  // monitor reads on counter 0: CAS_COUNT.RD
             //MCCntConfig[1] = MC_CH_PCI_PMON_CTL_EVENT(0x04) + MC_CH_PCI_PMON_CTL_UMASK(12); // monitor writes on counter 1: CAS_COUNT.WR
-             
-            MCCntConfig[0] = MC_CH_PCI_PMON_CTL_EVENT(0xd3) + MC_CH_PCI_PMON_CTL_UMASK(1);
-            MCCntConfig[1] = MC_CH_PCI_PMON_CTL_EVENT(0xd3) + MC_CH_PCI_PMON_CTL_UMASK(2);
-            if (PMM)
-            {
-                if (pcm->PMMTrafficMetricsAvailable())
-                {
-                    //MCCntConfig[2] = MC_CH_PCI_PMON_CTL_EVENT(0xe3); // monitor PMM_RDQ_REQUESTS on counter 2
-                    MCCntConfig[2] = MC_CH_PCI_PMON_CTL_EVENT(0xd3) + MC_CH_PCI_PMON_CTL_UMASK(4);
-                    MCCntConfig[3] = MC_CH_PCI_PMON_CTL_EVENT(0xe7); // monitor PMM_WPQ_REQUESTS on counter 3
-                }
-                else
-                {
-                    std::cerr << "PCM Error: PMM metrics are not available on your platform" << std::endl;
-                    return;
-                }
-            }
-            else
-            {
-                MCCntConfig[2] = MC_CH_PCI_PMON_CTL_EVENT(0x04) + MC_CH_PCI_PMON_CTL_UMASK(2);  // monitor partial writes on counter 2: CAS_COUNT.RD_UNDERFILL,
-            }
+            // 
+            //if (PMM)
+            //{
+            //    if (pcm->PMMTrafficMetricsAvailable())
+            //    {
+            //        //MCCntConfig[2] = MC_CH_PCI_PMON_CTL_EVENT(0xe3); // monitor PMM_RDQ_REQUESTS on counter 2
+            //        MCCntConfig[2] = MC_CH_PCI_PMON_CTL_EVENT(0xd3) + MC_CH_PCI_PMON_CTL_UMASK(4);
+            //        MCCntConfig[3] = MC_CH_PCI_PMON_CTL_EVENT(0xe7); // monitor PMM_WPQ_REQUESTS on counter 3
+            //    }
+            //    else
+            //    {
+            //        std::cerr << "PCM Error: PMM metrics are not available on your platform" << std::endl;
+            //        return;
+            //    }
+            //}
+            //else
+            //{
+            //    MCCntConfig[2] = MC_CH_PCI_PMON_CTL_EVENT(0x04) + MC_CH_PCI_PMON_CTL_UMASK(2);  // monitor partial writes on counter 2: CAS_COUNT.RD_UNDERFILL,
+            //}
         }
     } else {
         switch(cpu_model)
